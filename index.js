@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v16";
+  const VERSION = "v17";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -189,6 +189,13 @@
         value: storage.mode,
         onChange: (v) => {
           storage.mode = String(v).trim().toLowerCase() === "text" ? "text" : "tag";
+        },
+      }),
+      React.createElement(Forms.FormInput, {
+        title: "Replace members' own server tag with the badge? (yes / no)",
+        value: storage.override,
+        onChange: (v) => {
+          storage.override = String(v).trim().toLowerCase() === "yes" ? "yes" : "no";
         },
       }),
       React.createElement(Forms.FormInput, {
@@ -381,7 +388,7 @@
               // badge image next to the name. Skip it when the author already
               // has a guild tag, and fall back to the emoji text.
               const hasGuildTag = !!(msg.clanTag || msg.clanBadgeUrl);
-              if (storage.mode !== "text" && !hasGuildTag) {
+              if (storage.mode !== "text" && (!hasGuildTag || storage.override === "yes")) {
                 // Empty label = icon only. A zero-width space keeps the chip alive.
                 changes.clanTag = storage.label ? String(storage.label).slice(0, 4) : "\u200B";
                 changes.clanBadgeUrl = ICON_URL;
@@ -429,6 +436,7 @@
       storage.badge ??= "\uD83C\uDF31"; // seedling
       storage.mode ??= "tag"; // "tag" = chip with icon, "text" = emoji after the name
       storage.label ??= ""; // empty = icon only
+      storage.override ??= "no"; // "yes" = replace members' own server tag with the badge
       probeMode = "off";
 
       let attempts = 0;
