@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v8";
+  const VERSION = "v9";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -81,6 +81,69 @@
     return out;
   }
 
+
+  // --- Discovery probes ---------------------------------------------------
+  // Record the names of components that get rendered, so we can see which one
+  // draws a chat message header.
+  const seenComponents = new Set();
+  function componentName(t) {
+    if (!t || typeof t === "string") return "";
+    return (
+      t.displayName ||
+      t.name ||
+      (t.type && (t.type.displayName || t.type.name)) ||
+      (t.render && (t.render.displayName || t.render.name)) ||
+      ""
+    );
+  }
+  function recordElementType(args) {
+    try {
+      if (seenComponents.size > 4000) return;
+      const n = componentName(args[0]);
+      if (n) seenComponents.add(n);
+    } catch (e) {}
+  }
+  function startRenderProbe() {
+    try {
+      const rt = vendetta.metro.findByProps("jsx", "jsxs");
+      if (rt) {
+        unpatches.push(vendetta.patcher.before("jsx", rt, recordElementType));
+        unpatches.push(vendetta.patcher.before("jsxs", rt, recordElementType));
+        return "jsx runtime";
+      }
+    } catch (e) {}
+    try {
+      unpatches.push(vendetta.patcher.before("createElement", React, recordElementType));
+      return "createElement";
+    } catch (e) {}
+    return "none";
+  }
+  function renderedMessageish() {
+    const re = /message|author|username|header|guildtag|clan|nick|displayname|chat/i;
+    return Array.from(seenComponents).filter((n) => re.test(n)).sort().slice(0, 150);
+  }
+
+  // Named exports (not just default) whose key looks relevant.
+  function scanKeys() {
+    const out = [];
+    try {
+      const re = /^(?!use|get|format|resolve|create)(.*message.*(header|author|user|name)|.*author.*name|chatmessage|messageheader|messageauthor|usernametext)/i;
+      const mods = vendetta.metro.modules;
+      for (const id in mods) {
+        if (out.length >= 60) break;
+        try {
+          const m = mods[id];
+          if (!m || !m.isInitialized) continue;
+          const e = m.publicModule && m.publicModule.exports;
+          if (!e || typeof e !== "object") continue;
+          const keys = Object.keys(e).filter((k) => re.test(k));
+          if (keys.length) out.push(id + ": " + keys.slice(0, 4).join(", "));
+        } catch (err) {}
+      }
+    } catch (err) {}
+    return out;
+  }
+
   function joinedAtOf(guildId, userId) {
     if (!guildId || !userId) return null;
     const member = GuildMemberStore.getMember(guildId, userId);
@@ -106,6 +169,9 @@
           "\n\nUsernameText renders seen: " + calls +
           "\nGuildMemberStore: " + (GuildMemberStore ? "found" : "MISSING") +
           "\nSelectedGuildStore: " + (SelectedGuildStore ? "found" : "MISSING") +
+          "\n\nRender probe: " + probeMode + ", " + seenComponents.size + " component names seen" +
+          "\n\nRendered (message-ish):\n" + renderedMessageish().join("\n") +
+          "\n\nNamed exports:\n" + scanKeys().join("\n") +
           "\n\nCandidate components:\n" + scanComponents().join("\n")
       ),
       React.createElement(Forms.FormInput, {
@@ -131,6 +197,7 @@
   let patched = false;
   let stopTimer;
   let propReports = 0;
+  let probeMode = "not started";
   let calls = 0; // how many times the patched UsernameText has rendered
 
   // Find the module whose default export is the UsernameText component.
@@ -214,6 +281,7 @@
       diag("onLoad called");
       storage.days ??= 7;
       storage.badge ??= "\uD83C\uDF31"; // seedling
+      probeMode = startRenderProbe();
 
       let attempts = 0;
       const timer = setInterval(() => {
