@@ -8,13 +8,27 @@
 (function (exports) {
   "use strict";
 
-  const VERSION = "v3";
+  const VERSION = "v4";
+
+  // Every diagnostic line is kept here and shown on the plugin's settings page,
+  // because toasts fired while Discord is still starting up can be lost.
+  const logs = [];
 
   // Defined first so it works even if a later lookup throws.
   function diag(text) {
     try {
+      logs.push(new Date().toLocaleTimeString() + "  " + text);
       console.log("[NewMemberBadge " + VERSION + "] " + text);
-      vendetta.ui.toasts.showToast("NMB " + VERSION + ": " + text);
+    } catch (e) {}
+    // Toast now and again after startup settles.
+    const toast = () => {
+      try {
+        vendetta.ui.toasts.showToast("NMB " + VERSION + ": " + text);
+      } catch (e) {}
+    };
+    toast();
+    try {
+      setTimeout(toast, 8000);
     } catch (e) {}
   }
 
@@ -53,6 +67,12 @@
     return React.createElement(
       ReactNative.ScrollView,
       null,
+      React.createElement(
+        ReactNative.Text,
+        { style: { color: "#ffffff", padding: 16 }, selectable: true },
+        "NewMemberBadge " + VERSION + " diagnostics:\n" +
+          (logs.length ? logs.join("\n") : "(no log lines yet)")
+      ),
       React.createElement(Forms.FormInput, {
         title: "Days a member counts as new",
         value: String(storage.days),
