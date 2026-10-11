@@ -8,13 +8,24 @@
 (function (exports) {
   "use strict";
 
+  const VERSION = "v3";
+
+  // Defined first so it works even if a later lookup throws.
+  function diag(text) {
+    try {
+      console.log("[NewMemberBadge " + VERSION + "] " + text);
+      vendetta.ui.toasts.showToast("NMB " + VERSION + ": " + text);
+    } catch (e) {}
+  }
+
+  diag("file evaluated");
+
   const { before } = vendetta.patcher;
   const { findByStoreName } = vendetta.metro;
   const { React, ReactNative } = vendetta.metro.common;
   const { storage } = vendetta.plugin;
   const { useProxy } = vendetta.storage;
   const { Forms } = vendetta.ui.components;
-  const { showToast } = vendetta.ui.toasts;
 
   const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -24,13 +35,6 @@
 
   let unpatch;
   let reported = 0; // how many diagnostic reports we've shown
-
-  function diag(text) {
-    try {
-      console.log("[NewMemberBadge] " + text);
-      showToast("NMB: " + text);
-    } catch (e) {}
-  }
 
   function joinedAtOf(guildId, userId) {
     if (!guildId || !userId) return null;
@@ -70,6 +74,7 @@
 
   exports.default = {
     onLoad() {
+      diag("onLoad called");
       storage.days ??= 7;
       storage.badge ??= "🌱"; // seedling
 
