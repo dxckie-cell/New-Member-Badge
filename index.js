@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v14";
+  const VERSION = "v15";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -192,7 +192,7 @@
         },
       }),
       React.createElement(Forms.FormInput, {
-        title: "Tag label (tag mode)",
+        title: "Tag label, up to 4 letters (tag mode)",
         value: storage.tagText,
         onChange: (v) => {
           storage.tagText = v;
@@ -377,16 +377,14 @@
             if (joinedAt && isNew(joinedAt)) {
               badged++;
               const changes = {};
-              // Preferred: a tag chip with the badge icon next to the name.
-              // Skip it when the author already has a tag (BOT, etc.).
-              if (storage.mode !== "text" && (msg.tagText === null || msg.tagText === undefined)) {
-                changes.tagText = storage.tagText;
-                changes.tagAccessibilityLabel = "New member";
-                changes.tagVerified = false;
-                changes.tagIconUrl = ICON_URL;
-                // Green text/icon tint on a dark green chip.
-                changes.tagTextColor = 0x2ecc71;
-                changes.tagBackgroundColor = 0x1f3d2b;
+              // Preferred: render it like a guild tag, which shows a full-colour
+              // badge image next to the name. Skip it when the author already
+              // has a guild tag, and fall back to the emoji text.
+              const hasGuildTag = !!(msg.clanTag || msg.clanBadgeUrl);
+              if (storage.mode !== "text" && !hasGuildTag) {
+                changes.clanTag = String(storage.tagText || "NEW").slice(0, 4);
+                changes.clanBadgeUrl = ICON_URL;
+                changes.clanTagGuildId = msg.guildId || guildId;
               } else if (!msg.username.endsWith(" " + storage.badge)) {
                 changes.username = msg.username + " " + storage.badge;
               }
@@ -429,7 +427,7 @@
       storage.days ??= 7;
       storage.badge ??= "\uD83C\uDF31"; // seedling
       storage.mode ??= "tag"; // "tag" = chip with icon, "text" = emoji after the name
-      storage.tagText ??= "New";
+      storage.tagText ??= "NEW";
       probeMode = "off";
 
       let attempts = 0;
