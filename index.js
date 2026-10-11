@@ -1,11 +1,11 @@
-// NewMemberBadge for Revenge (Vendetta/Bunny plugin spec)
-// Port of Ushie's Aliucord plugin: flags chat authors who joined the current
-// server less than N days ago.
-//
-// DIAGNOSTIC BUILD: shows a few toasts explaining which step works, so we can
-// tell why a badge does or doesn't appear. Remove the `diag(...)` calls once
-// it works.
 (function (exports) {
+  // NewMemberBadge for Revenge (Vendetta/Bunny plugin spec)
+  // Port of Ushie's Aliucord plugin: flags chat authors who joined the current
+  // server less than N days ago.
+  //
+  // DIAGNOSTIC BUILD: shows a few toasts explaining which step works, so we can
+  // tell why a badge does or doesn't appear. Remove the `diag(...)` calls once
+  // it works.
   "use strict";
 
   const VERSION = "v4";
