@@ -103,7 +103,8 @@
         { style: { color: "#ffffff", padding: 16 }, selectable: true },
         "NewMemberBadge " + VERSION + " diagnostics:\n" +
           (logs.length ? logs.join("\n") : "(no log lines yet)") +
-          "\n\nGuildMemberStore: " + (GuildMemberStore ? "found" : "MISSING") +
+          "\n\nUsernameText renders seen: " + calls +
+          "\nGuildMemberStore: " + (GuildMemberStore ? "found" : "MISSING") +
           "\nSelectedGuildStore: " + (SelectedGuildStore ? "found" : "MISSING") +
           "\n\nCandidate components:\n" + scanComponents().join("\n")
       ),
