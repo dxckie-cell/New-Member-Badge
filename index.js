@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v13";
+  const VERSION = "v14";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -384,8 +384,9 @@
                 changes.tagAccessibilityLabel = "New member";
                 changes.tagVerified = false;
                 changes.tagIconUrl = ICON_URL;
-                changes.tagTextColor = 0xffffff;
-                changes.tagBackgroundColor = 0x2ecc71;
+                // Green text/icon tint on a dark green chip.
+                changes.tagTextColor = 0x2ecc71;
+                changes.tagBackgroundColor = 0x1f3d2b;
               } else if (!msg.username.endsWith(" " + storage.badge)) {
                 changes.username = msg.username + " " + storage.badge;
               }
