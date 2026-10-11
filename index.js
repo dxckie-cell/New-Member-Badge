@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v6";
+  const VERSION = "v7";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -34,7 +34,7 @@
 
   diag("file evaluated");
 
-  const { before } = vendetta.patcher;
+  const { after } = vendetta.patcher;
   const { findByStoreName } = vendetta.metro;
   const { React, ReactNative } = vendetta.metro.common;
   const { storage } = vendetta.plugin;
@@ -45,7 +45,6 @@
 
   const GuildMemberStore = findByStoreName("GuildMemberStore");
   const SelectedGuildStore = findByStoreName("SelectedGuildStore");
-  const ChatManager = ReactNative.NativeModules.DCDChatManager;
 
   let unpatch;
   let reported = 0; // how many diagnostic reports we've shown
@@ -127,84 +126,111 @@
     );
   }
 
+  const unpatches = [];
+  let patched = false;
+  let stopTimer;
+  let propReports = 0;
+
+  // Find the module whose default export is the UsernameText component.
+  function findUsernameTextModule() {
+    const mods = vendetta.metro.modules;
+    for (const id in mods) {
+      try {
+        const m = mods[id];
+        if (!m || !m.isInitialized) continue;
+        const e = m.publicModule && m.publicModule.exports;
+        const d = e && e.default;
+        if (d && (d.displayName === "UsernameText" || d.name === "UsernameText")) return e;
+      } catch (err) {}
+    }
+    return null;
+  }
+
+  function badgeFor(props) {
+    const userId =
+      (props.user && props.user.id) ||
+      props.userId ||
+      (props.author && props.author.id) ||
+      (props.member && props.member.userId);
+    const guildId = props.guildId || SelectedGuildStore.getGuildId();
+    const joinedAt = guildId && userId ? joinedAtOf(guildId, userId) : null;
+    return { userId, guildId, joinedAt, isNew: !!joinedAt && isNew(joinedAt) };
+  }
+
+  function patchUsernameText() {
+    const mod = findUsernameTextModule();
+    if (!mod) return false;
+
+    const target = typeof mod.default === "function" ? "default" : null;
+    if (!target) {
+      diag("UsernameText default export is " + typeof mod.default + " (needs different patch)");
+      patched = true;
+      return true;
+    }
+
+    unpatches.push(
+      after(target, mod, (args, ret) => {
+        try {
+          const props = args[0] || {};
+          const info = badgeFor(props);
+
+          if (propReports < 4) {
+            propReports++;
+            diag(
+              "props=" + Object.keys(props).slice(0, 12).join(",") +
+                " userId=" + (info.userId ? "yes" : "no") +
+                " guild=" + (info.guildId ? "yes" : "no") +
+                " joined=" + (info.joinedAt ? "yes" : "no") +
+                " new=" + info.isNew
+            );
+          }
+
+          if (!info.isNew || !ret) return;
+          return React.createElement(
+            React.Fragment,
+            null,
+            ret,
+            React.createElement(ReactNative.Text, null, " " + storage.badge)
+          );
+        } catch (e) {
+          if (propReports < 6) {
+            propReports++;
+            diag("error: " + (e && e.message));
+          }
+        }
+      })
+    );
+
+    patched = true;
+    diag("patched UsernameText");
+    return true;
+  }
+
   exports.default = {
     onLoad() {
       diag("onLoad called");
       storage.days ??= 7;
-      storage.badge ??= "🌱"; // seedling
+      storage.badge ??= "\uD83C\uDF31"; // seedling
 
-      if (!ChatManager || typeof ChatManager.updateRows !== "function") {
-        diag("DCDChatManager.updateRows not found - this Discord build renders chat differently");
-        return;
-      }
-      diag("loaded, hooked updateRows");
-
-      // Chat rows are handed to the native renderer as a JSON string.
-      unpatch = before("updateRows", ChatManager, (args) => {
-        try {
-          const raw = args[1];
-          if (typeof raw !== "string") {
-            if (reported < 2) {
-              reported++;
-              diag("updateRows arg[1] is " + typeof raw + ", not a JSON string");
-            }
-            return;
-          }
-
-          const guildId = SelectedGuildStore.getGuildId();
-          const rows = JSON.parse(raw);
-
-          let messages = 0;
-          let withId = 0;
-          let withJoin = 0;
-          let badged = 0;
-          let sampleKeys = "";
-
-          for (const row of rows) {
-            const msg = row && row.message;
-            if (!msg || typeof msg.username !== "string") continue;
-            messages++;
-            if (!sampleKeys) sampleKeys = Object.keys(msg).slice(0, 25).join(",");
-
-            const userId = msg.authorId ?? msg.userId ?? (msg.author && msg.author.id);
-            if (userId) withId++;
-
-            const joinedAt = guildId ? joinedAtOf(guildId, userId) : null;
-            if (joinedAt) withJoin++;
-
-            if (joinedAt && isNew(joinedAt) && !msg.username.endsWith(" " + storage.badge)) {
-              msg.username = msg.username + " " + storage.badge;
-              badged++;
-            }
-          }
-
-          if (messages > 0) args[1] = JSON.stringify(rows);
-
-          // Report the first couple of batches that contain messages.
-          if (messages > 0 && reported < 2) {
-            reported++;
-            diag(
-              "guild=" + (guildId ? "yes" : "none") +
-                " msgs=" + messages +
-                " authorId=" + withId +
-                " joinDate=" + withJoin +
-                " badged=" + badged
-            );
-            if (withId === 0) diag("message keys: " + sampleKeys);
-          }
-        } catch (e) {
-          // Never break chat rendering because of this plugin.
-          console.error("[NewMemberBadge]", e);
-          if (reported < 3) {
-            reported++;
-            diag("error: " + (e && e.message));
-          }
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts++;
+        if (patchUsernameText() || attempts >= 20) {
+          clearInterval(timer);
+          if (!patched) diag("UsernameText module not found after " + attempts + " tries");
         }
-      });
+      }, 1500);
+      stopTimer = () => clearInterval(timer);
     },
 
     onUnload() {
-      if (unpatch) unpatch();
+      if (stopTimer) stopTimer();
+      for (const u of unpatches) {
+        try {
+          u();
+        } catch (e) {}
+      }
+      unpatches.length = 0;
     },
 
     settings: Settings,
