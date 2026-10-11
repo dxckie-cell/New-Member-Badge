@@ -1,0 +1,10 @@
+{
+  "name": "NewMemberBadge",
+  "description": "Marks users who recently joined the server with a badge next to their name in chat.",
+  "authors": [{ "name": "Ported from Ushie's Aliucord plugin" }],
+  "main": "index.js",
+  "hash": "",
+  "vendetta": {
+    "icon": "ic_members"
+  }
+}
