@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v18";
+  const VERSION = "v19";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -42,7 +42,12 @@
   const { Forms } = vendetta.ui.components;
 
   const DAY_MS = 24 * 60 * 60 * 1000;
-  const ICON_URL = "https://dxckie-cell.github.io/New-Member-Badge/badge2.png";
+  const BASE_URL = "https://dxckie-cell.github.io/New-Member-Badge/";
+  // "big" fills the icon box more but sits slightly left; "centered" is smaller but centred.
+  const ICON_FILES = { big: "badge2.png", centered: "badge3.png" };
+  function iconUrl() {
+    return BASE_URL + (ICON_FILES[storage.icon] || ICON_FILES.centered);
+  }
 
   const GuildMemberStore = findByStoreName("GuildMemberStore");
   const SelectedGuildStore = findByStoreName("SelectedGuildStore");
@@ -189,6 +194,13 @@
         value: storage.mode,
         onChange: (v) => {
           storage.mode = String(v).trim().toLowerCase() === "text" ? "text" : "tag";
+        },
+      }),
+      React.createElement(Forms.FormInput, {
+        title: "Icon style: centered (smaller, centred) or big (larger, slightly left)",
+        value: storage.icon,
+        onChange: (v) => {
+          storage.icon = String(v).trim().toLowerCase() === "big" ? "big" : "centered";
         },
       }),
       React.createElement(Forms.FormInput, {
@@ -392,7 +404,7 @@
                 // Empty label = icon only. A zero-width space keeps the chip alive.
                 changes.clanTag =
                   storage.label === "none" ? "" : storage.label ? String(storage.label).slice(0, 4) : "\u200B";
-                changes.clanBadgeUrl = ICON_URL;
+                changes.clanBadgeUrl = iconUrl();
                 changes.clanTagGuildId = msg.guildId || guildId;
               } else if (!msg.username.endsWith(" " + storage.badge)) {
                 changes.username = msg.username + " " + storage.badge;
@@ -437,6 +449,7 @@
       storage.badge ??= "\uD83C\uDF31"; // seedling
       storage.mode ??= "tag"; // "tag" = chip with icon, "text" = emoji after the name
       storage.label ??= ""; // empty = icon only
+      storage.icon ??= "centered"; // "centered" or "big"
       storage.override ??= "no"; // "yes" = replace members' own server tag with the badge
       probeMode = "off";
 
