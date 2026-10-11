@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v9";
+  const VERSION = "v10";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -276,19 +276,112 @@
     return true;
   }
 
+  // --- Native chat rows ----------------------------------------------------
+  // Messages are drawn by the native DCDChatList from JSON rows. Try several
+  // ways of reaching the manager object that receives those rows.
+  function findChatManager() {
+    const tries = [
+      ["findByProps(updateRows)", () => vendetta.metro.findByProps("updateRows")],
+      ["NativeModules.DCDChatManager", () => ReactNative.NativeModules && ReactNative.NativeModules.DCDChatManager],
+      ["nativeModuleProxy.DCDChatManager", () => globalThis.nativeModuleProxy && globalThis.nativeModuleProxy.DCDChatManager],
+      ["TurboModuleRegistry.get", () => ReactNative.TurboModuleRegistry && ReactNative.TurboModuleRegistry.get("DCDChatManager")],
+    ];
+    const report = [];
+    for (const [label, fn] of tries) {
+      try {
+        const m = fn();
+        const has = !!m && typeof m.updateRows === "function";
+        report.push(label + ": " + (m ? (has ? "HAS updateRows" : "object, no updateRows") : "undefined"));
+        if (has) return { manager: m, label, report };
+      } catch (e) {
+        report.push(label + ": error " + (e && e.message));
+      }
+    }
+    return { manager: null, label: null, report };
+  }
+
+  function patchChatRows() {
+    const found = findChatManager();
+    if (!found.manager) return found;
+
+    try {
+      diag("manager via " + found.label + "; keys=" + Object.keys(found.manager).slice(0, 14).join(","));
+    } catch (e) {}
+
+    unpatches.push(
+      vendetta.patcher.before("updateRows", found.manager, (args) => {
+        try {
+          const raw = args[1];
+          if (typeof raw !== "string") {
+            if (propReports < 3) {
+              propReports++;
+              diag("updateRows arg[1] is " + typeof raw);
+            }
+            return;
+          }
+
+          const guildId = SelectedGuildStore.getGuildId();
+          const rows = JSON.parse(raw);
+
+          let messages = 0, withId = 0, withJoin = 0, badged = 0;
+          let sampleKeys = "";
+
+          for (const row of rows) {
+            const msg = row && row.message;
+            if (!msg || typeof msg.username !== "string") continue;
+            messages++;
+            if (!sampleKeys) sampleKeys = Object.keys(msg).slice(0, 30).join(",");
+
+            const userId = msg.authorId ?? msg.userId ?? (msg.author && msg.author.id);
+            if (userId) withId++;
+            const joinedAt = guildId ? joinedAtOf(guildId, userId) : null;
+            if (joinedAt) withJoin++;
+
+            if (joinedAt && isNew(joinedAt) && !msg.username.endsWith(" " + storage.badge)) {
+              msg.username = msg.username + " " + storage.badge;
+              badged++;
+            }
+          }
+
+          if (messages > 0) args[1] = JSON.stringify(rows);
+
+          if (messages > 0 && propReports < 4) {
+            propReports++;
+            diag(
+              "guild=" + (guildId ? "yes" : "none") + " msgs=" + messages +
+                " authorId=" + withId + " joinDate=" + withJoin + " badged=" + badged
+            );
+            if (withId === 0 || withJoin === 0) diag("message keys: " + sampleKeys);
+          }
+        } catch (e) {
+          if (propReports < 5) {
+            propReports++;
+            diag("rows error: " + (e && e.message));
+          }
+        }
+      })
+    );
+    return found;
+  }
+
   exports.default = {
     onLoad() {
       diag("onLoad called");
       storage.days ??= 7;
       storage.badge ??= "\uD83C\uDF31"; // seedling
-      probeMode = startRenderProbe();
+      probeMode = "off";
 
       let attempts = 0;
       const timer = setInterval(() => {
         attempts++;
-        if (patchUsernameText() || attempts >= 20) {
+        const found = patchChatRows();
+        if (found.manager) {
           clearInterval(timer);
-          if (!patched) diag("UsernameText module not found after " + attempts + " tries");
+          patched = true;
+          diag("hooked updateRows");
+        } else if (attempts >= 15) {
+          clearInterval(timer);
+          diag("chat manager not found: " + found.report.join(" | "));
         }
       }, 1500);
       stopTimer = () => clearInterval(timer);
