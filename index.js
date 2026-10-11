@@ -1,6 +1,10 @@
 // NewMemberBadge for Revenge (Vendetta/Bunny plugin spec)
 // Port of Ushie's Aliucord plugin: flags chat authors who joined the current
 // server less than N days ago.
+//
+// DIAGNOSTIC BUILD: shows a few toasts explaining which step works, so we can
+// tell why a badge does or doesn't appear. Remove the `diag(...)` calls once
+// it works.
 (function (exports) {
   "use strict";
 
@@ -10,6 +14,7 @@
   const { storage } = vendetta.plugin;
   const { useProxy } = vendetta.storage;
   const { Forms } = vendetta.ui.components;
+  const { showToast } = vendetta.ui.toasts;
 
   const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -18,12 +23,22 @@
   const ChatManager = ReactNative.NativeModules.DCDChatManager;
 
   let unpatch;
+  let reported = 0; // how many diagnostic reports we've shown
 
-  function isNewMember(guildId, userId) {
-    if (!guildId || !userId) return false;
+  function diag(text) {
+    try {
+      console.log("[NewMemberBadge] " + text);
+      showToast("NMB: " + text);
+    } catch (e) {}
+  }
+
+  function joinedAtOf(guildId, userId) {
+    if (!guildId || !userId) return null;
     const member = GuildMemberStore.getMember(guildId, userId);
-    const joinedAt = member && member.joinedAt;
-    if (!joinedAt) return false;
+    return (member && member.joinedAt) || null;
+  }
+
+  function isNew(joinedAt) {
     const joined = Date.parse(joinedAt);
     if (Number.isNaN(joined)) return false;
     return Date.now() - joined < Number(storage.days) * DAY_MS;
@@ -56,29 +71,74 @@
   exports.default = {
     onLoad() {
       storage.days ??= 7;
-      storage.badge ??= "\uD83C\uDF31"; // seedling
+      storage.badge ??= "🌱"; // seedling
+
+      if (!ChatManager || typeof ChatManager.updateRows !== "function") {
+        diag("DCDChatManager.updateRows not found - this Discord build renders chat differently");
+        return;
+      }
+      diag("loaded, hooked updateRows");
 
       // Chat rows are handed to the native renderer as a JSON string.
       unpatch = before("updateRows", ChatManager, (args) => {
         try {
-          const guildId = SelectedGuildStore.getGuildId();
-          if (!guildId) return; // DMs have no join date
+          const raw = args[1];
+          if (typeof raw !== "string") {
+            if (reported < 2) {
+              reported++;
+              diag("updateRows arg[1] is " + typeof raw + ", not a JSON string");
+            }
+            return;
+          }
 
-          const rows = JSON.parse(args[1]);
+          const guildId = SelectedGuildStore.getGuildId();
+          const rows = JSON.parse(raw);
+
+          let messages = 0;
+          let withId = 0;
+          let withJoin = 0;
+          let badged = 0;
+          let sampleKeys = "";
+
           for (const row of rows) {
             const msg = row && row.message;
             if (!msg || typeof msg.username !== "string") continue;
-            if (msg.username.endsWith(" " + storage.badge)) continue;
+            messages++;
+            if (!sampleKeys) sampleKeys = Object.keys(msg).slice(0, 25).join(",");
 
             const userId = msg.authorId ?? msg.userId ?? (msg.author && msg.author.id);
-            if (isNewMember(guildId, userId)) {
+            if (userId) withId++;
+
+            const joinedAt = guildId ? joinedAtOf(guildId, userId) : null;
+            if (joinedAt) withJoin++;
+
+            if (joinedAt && isNew(joinedAt) && !msg.username.endsWith(" " + storage.badge)) {
               msg.username = msg.username + " " + storage.badge;
+              badged++;
             }
           }
-          args[1] = JSON.stringify(rows);
+
+          if (messages > 0) args[1] = JSON.stringify(rows);
+
+          // Report the first couple of batches that contain messages.
+          if (messages > 0 && reported < 2) {
+            reported++;
+            diag(
+              "guild=" + (guildId ? "yes" : "none") +
+                " msgs=" + messages +
+                " authorId=" + withId +
+                " joinDate=" + withJoin +
+                " badged=" + badged
+            );
+            if (withId === 0) diag("message keys: " + sampleKeys);
+          }
         } catch (e) {
           // Never break chat rendering because of this plugin.
           console.error("[NewMemberBadge]", e);
+          if (reported < 3) {
+            reported++;
+            diag("error: " + (e && e.message));
+          }
         }
       });
     },
