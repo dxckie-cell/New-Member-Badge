@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v15";
+  const VERSION = "v16";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -192,10 +192,10 @@
         },
       }),
       React.createElement(Forms.FormInput, {
-        title: "Tag label, up to 4 letters (tag mode)",
-        value: storage.tagText,
+        title: "Label next to the icon, up to 4 letters (empty = icon only)",
+        value: storage.label,
         onChange: (v) => {
-          storage.tagText = v;
+          storage.label = v;
         },
       }),
       React.createElement(Forms.FormInput, {
@@ -382,7 +382,8 @@
               // has a guild tag, and fall back to the emoji text.
               const hasGuildTag = !!(msg.clanTag || msg.clanBadgeUrl);
               if (storage.mode !== "text" && !hasGuildTag) {
-                changes.clanTag = String(storage.tagText || "NEW").slice(0, 4);
+                // Empty label = icon only. A zero-width space keeps the chip alive.
+                changes.clanTag = storage.label ? String(storage.label).slice(0, 4) : "\u200B";
                 changes.clanBadgeUrl = ICON_URL;
                 changes.clanTagGuildId = msg.guildId || guildId;
               } else if (!msg.username.endsWith(" " + storage.badge)) {
@@ -427,7 +428,7 @@
       storage.days ??= 7;
       storage.badge ??= "\uD83C\uDF31"; // seedling
       storage.mode ??= "tag"; // "tag" = chip with icon, "text" = emoji after the name
-      storage.tagText ??= "NEW";
+      storage.label ??= ""; // empty = icon only
       probeMode = "off";
 
       let attempts = 0;
