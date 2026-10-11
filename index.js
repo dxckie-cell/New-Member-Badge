@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v11";
+  const VERSION = "v12";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -197,6 +197,7 @@
   let patched = false;
   let stopTimer;
   let propReports = 0;
+  let loggedFields = false;
   let probeMode = "not started";
   let calls = 0; // how many times the patched UsernameText has rendered
 
@@ -337,6 +338,21 @@
             if (!msg || typeof msg.username !== "string") return row;
             messages++;
             if (!sampleKeys) sampleKeys = Object.keys(msg).slice(0, 30).join(",");
+            if (!loggedFields) {
+              loggedFields = true;
+              try {
+                const parts = [];
+                for (const k of Object.keys(msg)) {
+                  if (/icon|tag|role|badge|decor|avatar|name|color/i.test(k)) {
+                    let v;
+                    try { v = JSON.stringify(msg[k]); } catch (e) { v = String(msg[k]); }
+                    parts.push(k + "=" + String(v).slice(0, 70));
+                  }
+                }
+                diag("fields: " + parts.join(" ; "));
+                diag("all keys: " + Object.keys(msg).join(","));
+              } catch (e) {}
+            }
 
             const userId = msg.authorId ?? msg.userId ?? (msg.author && msg.author.id);
             if (userId) withId++;
