@@ -1,7 +1,7 @@
 {
   "name": "NewMemberBadge",
-  "description": "Marks users who recently joined the server with a badge next to their name in chat.",
-  "authors": [{ "name": "Ported from Ushie's Aliucord plugin" }],
+  "description": "Shows a small badge next to the name of anyone who recently joined the server, so you can spot new members in chat. Port of Ushie's NewMemberBadge for Aliucord.",
+  "authors": [{ "name": "dxckie cell" }],
   "main": "index.js",
   "hash": "",
   "vendetta": {
