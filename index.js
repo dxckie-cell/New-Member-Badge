@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v7";
+  const VERSION = "v8";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -130,6 +130,7 @@
   let patched = false;
   let stopTimer;
   let propReports = 0;
+  let calls = 0; // how many times the patched UsernameText has rendered
 
   // Find the module whose default export is the UsernameText component.
   function findUsernameTextModule() {
@@ -171,6 +172,7 @@
     unpatches.push(
       after(target, mod, (args, ret) => {
         try {
+          calls++;
           const props = args[0] || {};
           const info = badgeFor(props);
 
