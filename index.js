@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v12";
+  const VERSION = "v13";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -42,6 +42,7 @@
   const { Forms } = vendetta.ui.components;
 
   const DAY_MS = 24 * 60 * 60 * 1000;
+  const ICON_URL = "https://dxckie-cell.github.io/New-Member-Badge/badge.png";
 
   const GuildMemberStore = findByStoreName("GuildMemberStore");
   const SelectedGuildStore = findByStoreName("SelectedGuildStore");
@@ -181,6 +182,20 @@
         onChange: (v) => {
           const n = parseInt(v, 10);
           if (!Number.isNaN(n) && n > 0) storage.days = n;
+        },
+      }),
+      React.createElement(Forms.FormInput, {
+        title: "Mode: tag (icon chip) or text (emoji after name)",
+        value: storage.mode,
+        onChange: (v) => {
+          storage.mode = String(v).trim().toLowerCase() === "text" ? "text" : "tag";
+        },
+      }),
+      React.createElement(Forms.FormInput, {
+        title: "Tag label (tag mode)",
+        value: storage.tagText,
+        onChange: (v) => {
+          storage.tagText = v;
         },
       }),
       React.createElement(Forms.FormInput, {
@@ -359,12 +374,23 @@
             const joinedAt = guildId ? joinedAtOf(guildId, userId) : null;
             if (joinedAt) withJoin++;
 
-            if (joinedAt && isNew(joinedAt) && !msg.username.endsWith(" " + storage.badge)) {
+            if (joinedAt && isNew(joinedAt)) {
               badged++;
+              const changes = {};
+              // Preferred: a tag chip with the badge icon next to the name.
+              // Skip it when the author already has a tag (BOT, etc.).
+              if (storage.mode !== "text" && (msg.tagText === null || msg.tagText === undefined)) {
+                changes.tagText = storage.tagText;
+                changes.tagAccessibilityLabel = "New member";
+                changes.tagVerified = false;
+                changes.tagIconUrl = ICON_URL;
+                changes.tagTextColor = 0xffffff;
+                changes.tagBackgroundColor = 0x2ecc71;
+              } else if (!msg.username.endsWith(" " + storage.badge)) {
+                changes.username = msg.username + " " + storage.badge;
+              }
               // Copy instead of mutating, in case the row objects are frozen.
-              return Object.assign({}, row, {
-                message: Object.assign({}, msg, { username: msg.username + " " + storage.badge }),
-              });
+              return Object.assign({}, row, { message: Object.assign({}, msg, changes) });
             }
             return row;
           });
@@ -401,6 +427,8 @@
       diag("onLoad called");
       storage.days ??= 7;
       storage.badge ??= "\uD83C\uDF31"; // seedling
+      storage.mode ??= "tag"; // "tag" = chip with icon, "text" = emoji after the name
+      storage.tagText ??= "New";
       probeMode = "off";
 
       let attempts = 0;
