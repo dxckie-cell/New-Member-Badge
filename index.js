@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v10";
+  const VERSION = "v11";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -312,23 +312,29 @@
       vendetta.patcher.before("updateRows", found.manager, (args) => {
         try {
           const raw = args[1];
-          if (typeof raw !== "string") {
+          const isString = typeof raw === "string";
+          let rows = isString ? JSON.parse(raw) : raw;
+          let wrapper = null;
+          if (rows && !Array.isArray(rows) && Array.isArray(rows.rows)) {
+            wrapper = rows;
+            rows = rows.rows;
+          }
+          if (!Array.isArray(rows)) {
             if (propReports < 3) {
               propReports++;
-              diag("updateRows arg[1] is " + typeof raw);
+              diag("updateRows arg[1] is " + (rows === null ? "null" : typeof rows) +
+                (rows && typeof rows === "object" ? " keys=" + Object.keys(rows).slice(0, 8).join(",") : ""));
             }
             return;
           }
 
           const guildId = SelectedGuildStore.getGuildId();
-          const rows = JSON.parse(raw);
-
           let messages = 0, withId = 0, withJoin = 0, badged = 0;
           let sampleKeys = "";
 
-          for (const row of rows) {
+          const newRows = rows.map((row) => {
             const msg = row && row.message;
-            if (!msg || typeof msg.username !== "string") continue;
+            if (!msg || typeof msg.username !== "string") return row;
             messages++;
             if (!sampleKeys) sampleKeys = Object.keys(msg).slice(0, 30).join(",");
 
@@ -338,23 +344,33 @@
             if (joinedAt) withJoin++;
 
             if (joinedAt && isNew(joinedAt) && !msg.username.endsWith(" " + storage.badge)) {
-              msg.username = msg.username + " " + storage.badge;
               badged++;
+              // Copy instead of mutating, in case the row objects are frozen.
+              return Object.assign({}, row, {
+                message: Object.assign({}, msg, { username: msg.username + " " + storage.badge }),
+              });
             }
+            return row;
+          });
+
+          if (badged > 0) {
+            if (isString) args[1] = JSON.stringify(wrapper ? Object.assign({}, wrapper, { rows: newRows }) : newRows);
+            else args[1] = wrapper ? Object.assign({}, wrapper, { rows: newRows }) : newRows;
           }
 
-          if (messages > 0) args[1] = JSON.stringify(rows);
-
-          if (messages > 0 && propReports < 4) {
+          if (propReports < 5) {
             propReports++;
+            const first = rows[0];
             diag(
-              "guild=" + (guildId ? "yes" : "none") + " msgs=" + messages +
+              "arg1=" + (isString ? "string" : "object") + " rows=" + rows.length +
+                " firstRowKeys=" + (first && typeof first === "object" ? Object.keys(first).slice(0, 8).join(",") : typeof first) +
+                " | guild=" + (guildId ? "yes" : "none") + " msgs=" + messages +
                 " authorId=" + withId + " joinDate=" + withJoin + " badged=" + badged
             );
-            if (withId === 0 || withJoin === 0) diag("message keys: " + sampleKeys);
+            if (messages > 0 && (withId === 0 || withJoin === 0)) diag("message keys: " + sampleKeys);
           }
         } catch (e) {
-          if (propReports < 5) {
+          if (propReports < 6) {
             propReports++;
             diag("rows error: " + (e && e.message));
           }
