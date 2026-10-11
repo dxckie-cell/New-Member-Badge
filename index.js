@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v4";
+  const VERSION = "v6";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -50,6 +50,38 @@
   let unpatch;
   let reported = 0; // how many diagnostic reports we've shown
 
+
+  // Chat is drawn by JS components on this Discord build, so look for the
+  // message-header component. List module exports whose names look relevant.
+  function scanComponents() {
+    const out = [];
+    try {
+      const re = /message.*(header|author|user)|author.?name|user.?name|guild.?tag|clan.?tag|primary.?guild|chat.?message|MessageContent/i;
+      const mods = vendetta.metro.modules;
+      for (const id in mods) {
+        if (out.length >= 80) break;
+        try {
+          const m = mods[id];
+          if (!m || !m.isInitialized) continue;
+          const e = m.publicModule && m.publicModule.exports;
+          if (!e) continue;
+          const names = [];
+          const d = e.default;
+          if (d && (typeof d === "function" || typeof d === "object")) {
+            names.push(d.displayName || d.name || "");
+          }
+          if (typeof e === "function") names.push(e.displayName || e.name || "");
+          if (e.name && typeof e.name === "string") names.push(e.name);
+          const hit = names.filter((n) => n && re.test(n));
+          if (hit.length) out.push(id + ": " + hit.join("/"));
+        } catch (err) {}
+      }
+    } catch (err) {
+      out.push("scan error: " + (err && err.message));
+    }
+    return out;
+  }
+
   function joinedAtOf(guildId, userId) {
     if (!guildId || !userId) return null;
     const member = GuildMemberStore.getMember(guildId, userId);
@@ -71,7 +103,10 @@
         ReactNative.Text,
         { style: { color: "#ffffff", padding: 16 }, selectable: true },
         "NewMemberBadge " + VERSION + " diagnostics:\n" +
-          (logs.length ? logs.join("\n") : "(no log lines yet)")
+          (logs.length ? logs.join("\n") : "(no log lines yet)") +
+          "\n\nGuildMemberStore: " + (GuildMemberStore ? "found" : "MISSING") +
+          "\nSelectedGuildStore: " + (SelectedGuildStore ? "found" : "MISSING") +
+          "\n\nCandidate components:\n" + scanComponents().join("\n")
       ),
       React.createElement(Forms.FormInput, {
         title: "Days a member counts as new",
