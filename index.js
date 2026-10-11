@@ -8,7 +8,7 @@
   // it works.
   "use strict";
 
-  const VERSION = "v17";
+  const VERSION = "v18";
 
   // Every diagnostic line is kept here and shown on the plugin's settings page,
   // because toasts fired while Discord is still starting up can be lost.
@@ -42,7 +42,7 @@
   const { Forms } = vendetta.ui.components;
 
   const DAY_MS = 24 * 60 * 60 * 1000;
-  const ICON_URL = "https://dxckie-cell.github.io/New-Member-Badge/badge.png";
+  const ICON_URL = "https://dxckie-cell.github.io/New-Member-Badge/badge2.png";
 
   const GuildMemberStore = findByStoreName("GuildMemberStore");
   const SelectedGuildStore = findByStoreName("SelectedGuildStore");
@@ -199,7 +199,7 @@
         },
       }),
       React.createElement(Forms.FormInput, {
-        title: "Label next to the icon, up to 4 letters (empty = icon only)",
+        title: "Label next to the icon, up to 4 letters (empty = icon only; \"none\" = no text at all)",
         value: storage.label,
         onChange: (v) => {
           storage.label = v;
@@ -390,7 +390,8 @@
               const hasGuildTag = !!(msg.clanTag || msg.clanBadgeUrl);
               if (storage.mode !== "text" && (!hasGuildTag || storage.override === "yes")) {
                 // Empty label = icon only. A zero-width space keeps the chip alive.
-                changes.clanTag = storage.label ? String(storage.label).slice(0, 4) : "\u200B";
+                changes.clanTag =
+                  storage.label === "none" ? "" : storage.label ? String(storage.label).slice(0, 4) : "\u200B";
                 changes.clanBadgeUrl = ICON_URL;
                 changes.clanTagGuildId = msg.guildId || guildId;
               } else if (!msg.username.endsWith(" " + storage.badge)) {
